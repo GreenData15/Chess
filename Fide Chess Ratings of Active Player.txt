@@ -1,0 +1,176 @@
+Fide Chess Ratings of Active Players in 2023
+_________________________________________
+
+Source: https://ratings.fide.com/topfed.phtml
+
+Data Collection Method: Copy and paste into excel sheet
+
+--------------------
+
+Data Cleaning Steps:
+
+--------------------------------------------------------------------------------------------------------------------------------------------------
+
+1. Remove irrelevant columns: Rank and "G"
+
+2. Create a table and sort blanks in B-Year, delete these columns
+
+3. When copying and pasting data tables from website into Excel, there is an undesired leading space that isn't
+   a normal white space, it has to be selected, then pasted into Find & Replace with empty values to remove.
+   This was applied to columns Title, Fed, Rating, and B-Year
+
+4. When copying and pasting values, there's a chance for error, I checked duplicates for all columns and found that
+   I pasted Ukraine and Canada twice, they were removed.
+
+5. Made columns lowercase, renamed to name, title, country, elo_rating, birth_year
+
+6. Replaced all short hand abbreviations in title column to the full FIDE Rank Titles by finding and replacing
+
+7. Replaced all alpha-3 country codes in country column with the full country names by finding and replacing
+
+8. Was considering text-splitting the names into first and last names, but there is a significant amount of names 
+   that are not following the conventional name format of [last name], [first name] (second name) (third name), and
+   a significant amount of them are the smaller set countries, meaning that I would have to manually adjust thousands
+   of names and that would be time-consuming, so I will leave all names in one column.
+
+9. Converted all names in column 'names' to upper using UPPER function. (I was considering PROPER but it only works
+   on the first character. Textsplitting would make name functions like "de la" in improper form)
+
+10. Created the column 'id' to have a primary key (was going to use names but there are 5 duplicate names from 
+    either the same or different countries).
+
+11. Saved this excel sheet as "players" with file type CSV UTF-8
+
+
+
+-----------------------------
+
+Preparation for SQL Database:
+
+-----------------------------------------------------------------------------------------
+
+1. I made 2 more CSV files: titles.csv and countries.csv. Each have the unique values for the 'titles' and 'countries' columns from players.csv and an ID representing each unique value from each table. This was done in an effort to be storage conscious and save query time, creating a small schema.
+
+2. Opened PGAdmin4 to create the tables for preparation of the csv upload.
+
+
+//----------------------------------//
+
+create table titles (
+	id int PRIMARY KEY,
+	title varchar(35)
+);
+
+create table countries (
+	id int PRIMARY KEY,
+	countries varchar(60)
+);
+
+create table players (
+	id int PRIMARY KEY,
+	name varchar(60),
+	title varchar(30),
+	title_id smallint REFERENCES public.titles (id) ON DELETE CASCADE,
+	country varchar(60),
+	country_id smallint REFERENCES public.countries (id) ON DELETE CASCADE,
+	elo_rating smallint,
+	birth_year smallint
+);
+
+\\-----------------------------------\\
+
+
+3. I then copied the CSVs into the database tables. It's important to copy the smaller reference tables first so that their data can match the foreign key pointers in the large table.
+
+
+//----------------------------------//
+
+copy titles 
+from 'C:\Users\Public\titles.csv'
+with (FORMAT CSV, HEADER);
+
+copy countries
+from 'C:\Users\Public\countries.csv'
+with (FORMAT CSV, HEADER);
+
+copy players 
+from 'C:\Users\Public\chess_players.csv'
+with (FORMAT CSV, HEADER, ENCODING 'windows-1252'); --For some reason this CSV file in particular was giving UTF-8 issues
+
+\\-----------------------------------\\
+
+
+4. Next step was to populate the title_id and country_id columns in players table with the information from the foreign key tables.
+
+
+//----------------------------------//
+
+UPDATE public.players SET title_id = (SELECT id FROM public.titles WHERE public.titles.title = public.players.title);
+UPDATE public.players SET country_id = (SELECT id FROM public.countries WHERE public.countries.countries = public.players.country);
+
+\\-----------------------------------\\
+
+
+5. After checking the values in the players table, next step is to delete the title and country columns since we can join the actual values from the original tables.
+
+
+//----------------------------------//
+
+ALTER TABLE public.players DROP COLUMN title;
+ALTER TABLE public.players DROP COLUMN country;
+
+\\-----------------------------------\\
+
+
+6. Now that the schema is set up, we can now begin performing query analysis.
+
+
+
+
+-------------------------------------------------------
+
+SQL Analyis
+
+------------------------------------------------------------------------------------
+
+For the next series of questions, assume that every question starts with "From this dataset of active players"
+
+#### SEE SQL CODING ####
+
+-------------------
+
+TABLEAU PREPARATION
+
+-------------------
+
+1. Tableau takes data primarily as XLSXs and has the capability of joining tables, so first I exported all of the relational tables created in my PGSQL sessions
+
+2. Converted each CSV export to XLSX
+
+3. Uploaded all workspaces to Tableau and related each to each other under schema, connecting the separate country_location to countries table
+
+--------------------
+
+TABLEAU SHEETS
+
+--------------------
+
+1. Sheet 1: Median ELO by country
+	a. Columns: Country (blue)
+	b. Rows: Latitude | Longitude (green)
+	c. GEO FILL Chart
+	d. 4 unknowns (UK + Netherlands)
+	e. Filter color by Median ELO
+	f. red-green diverging
+
+2. Boxplot:
+	a. Columns: Elo
+	b. Rows: Country
+	c. Marks: Country, ATTR(Name), ATTR(World Rank)
+	d. On the country label chart, click on Sort Options and Select "Field: ELO"
+	e. If the columns and rows don't produce the chart, aggregate the ELO independently, select plot, and then reverse the decision
+
+
+
+
+

@@ -1,0 +1,359 @@
+0. Baseline code for full table
+
+SELECT
+	p.id,
+	p.name as name,
+	t.title as title,
+	c.country as country,
+	p.elo_rating as elo,
+	p.birth_year
+FROM players p
+JOIN titles t ON p.title_id = t.id
+JOIN countries c ON p.country_id = c.id
+ORDER BY id
+___________________________________________________________________________
+
+1. Which chess player has the highest ELO? List their country and title.
+
+SELECT
+	p.name as name,
+	t.title as title,
+	c.country as country,
+	p.elo_rating as elo,
+	((date_part('year', (SELECT current_date))) - (birth_year + 1)) || '-' || 
+	((date_part('year', (SELECT current_date))) - birth_year) as approx_age
+FROM players p
+JOIN titles t ON p.title_id = t.id
+JOIN countries c ON p.country_id = c.id
+WHERE elo_rating = (SELECT MAX(elo_rating) FROM players);
+
+___________________________________________________________________________
+
+2. Who is the highest rated Women's Grandmaster title holder?
+SELECT
+	p.name as name,
+	t.title as title,
+	c.country as country,
+	p.elo_rating as elo,
+	((date_part('year', (SELECT current_date))) - (birth_year + 1)) || '-' || 
+	((date_part('year', (SELECT current_date))) - birth_year) as approx_age
+FROM players p
+JOIN titles t ON p.title_id = t.id
+JOIN countries c ON p.country_id = c.id
+WHERE p.title_id = 7 --(Women's Grandmasters)
+ORDER BY elo_rating DESC
+LIMIT 1; 
+
+___________________________________________________________________________
+
+3. List each country and the number of players representing them.
+
+SELECT 
+	c.country,
+	COUNT(*)
+FROM players p
+JOIN countries c ON p.country_id = c.id
+GROUP BY c.country
+ORDER BY count DESC;
+
+___________________________________________________________________________
+
+4. What is the approximate average age of players from each country? Include the count so that you can be presently aware of how sample size can skew the averages.
+
+SELECT 
+	c.country,
+	COUNT(*) as number_of_players,
+	AVG((date_part('year', (SELECT current_date))) - birth_year) as approx_avg_age
+FROM players p
+JOIN countries c ON p.country_id = c.id
+GROUP BY c.country
+ORDER BY approx_avg_age DESC
+
+___________________________________________________________________________
+
+5. What is the average ELO by age (approximate)? How many players are in each age group? What age has the highest average ELO? 
+
+SELECT 
+	COUNT(*) as number_of_players,
+	((date_part('year', (SELECT current_date))) - birth_year) as approx_age,
+	AVG(elo_rating) as average_elo
+FROM players
+GROUP BY approx_age
+ORDER BY approx_age ASC
+
+___________________________________________________________________________
+
+6. What is the average elo of players 18 and under?
+
+SELECT 
+	SUM(number_of_players) as number_of_players_under_18,
+	AVG(average_elo)
+FROM 
+	(SELECT 
+		COUNT(*) as number_of_players,
+		((date_part('year', (SELECT current_date))) - birth_year) as approx_age,
+		AVG(elo_rating) as average_elo
+	FROM players
+	GROUP BY approx_age
+	ORDER BY number_of_players DESC) as age_group
+WHERE approx_age <= 18;
+
+___________________________________________________________________________
+
+7. What is the average elo of players from 19 to 39?
+
+SELECT
+	SUM(number_of_players) as number_of_players_between19_39,
+	AVG(average_elo)
+FROM
+	(SELECT 
+		COUNT(*) as number_of_players,
+		((date_part('year', (SELECT current_date))) - birth_year) as approx_age,
+		AVG(elo_rating) as average_elo
+	FROM players
+	GROUP BY approx_age
+	ORDER BY number_of_players DESC) as age_group
+WHERE approx_age BETWEEN 19 AND 39;
+
+___________________________________________________________________________
+
+8. What is the average elo of players 40+?
+
+SELECT 
+	SUM(number_of_players) as number_of_players_under_18,
+	AVG(average_elo)
+FROM 
+	(SELECT 
+		COUNT(*) as number_of_players,
+		((date_part('year', (SELECT current_date))) - birth_year) as approx_age,
+		AVG(elo_rating) as average_elo
+	FROM players
+	GROUP BY approx_age
+	ORDER BY number_of_players DESC) as age_group
+WHERE approx_age >= 40; 
+
+___________________________________________________________________________
+
+9. Average ELO by country? Title?
+
+SELECT
+	c.country as country,
+	AVG(p.elo_rating)::numeric(6,2) as elo
+FROM players p
+JOIN countries c ON p.country_id = c.id
+GROUP BY country
+ORDER BY elo DESC;
+
+SELECT
+	t.title as title,
+	AVG(p.elo_rating)::numeric(6,2) as elo
+FROM players p
+JOIN titles t ON p.title_id = t.id
+GROUP BY title
+ORDER BY elo DESC;
+
+___________________________________________________________________________
+
+10. Average approximate age by title? Country? 
+
+SELECT
+	c.country as country,
+	AVG((date_part('year', (SELECT current_date))) - birth_year) as approx_age
+FROM players p
+JOIN countries c ON p.country_id = c.id
+GROUP BY country
+ORDER BY approx_age DESC;
+
+SELECT
+	t.title as title,
+	AVG((date_part('year', (SELECT current_date))) - birth_year) as approx_age
+FROM players p
+JOIN titles t ON p.title_id = t.id
+GROUP BY title
+ORDER BY approx_age DESC;
+
+___________________________________________________________________________
+
+11. Create a list of chess titles and how many active players currently hold them.
+
+SELECT
+	t.title as title,
+	COUNT(*) as number_of_players
+FROM players p
+JOIN titles t ON p.title_id = t.id
+WHERE title <> 'None'
+GROUP BY title
+ORDER BY number_of_players DESC
+
+___________________________________________________________________________
+
+12. How many players hold a women's chess title?
+
+SELECT 
+	SUM(number_of_players)
+FROM (SELECT
+		t.title as title,
+		COUNT(*) as number_of_players
+	FROM players p
+	JOIN titles t ON p.title_id = t.id
+	WHERE title LIKE 'Womens%'
+	GROUP BY title) as womens_titles
+
+___________________________________________________________________________
+
+13. What is the median chess ELO in this dataset?
+
+SELECT percentile_cont(.5) WITHIN GROUP (ORDER BY elo_rating)
+FROM players
+
+___________________________________________________________________________
+
+14. What is the median age (approximate) in this data set?
+
+SELECT percentile_cont(.5) WITHIN GROUP (ORDER BY approx_age)
+FROM(SELECT ((date_part('year', (SELECT current_date))) - birth_year) as approx_age
+	 FROM players) as age
+
+___________________________________________________________________________
+
+15. Median age of players by country within dataset
+
+SELECT 
+	country,
+	percentile_cont(.5) WITHIN GROUP (ORDER BY approx_age) as age
+FROM
+	(SELECT
+		c.country as country,
+		((date_part('year', (SELECT current_date))) - p.birth_year) as approx_age
+	 FROM players p
+	 JOIN countries c ON p.country_id = c.id) as age
+GROUP BY country
+ORDER BY age
+
+___________________________________________________________________________
+
+16. Median ELO by country within dataset
+
+SELECT 
+	country,
+	percentile_cont(.5) WITHIN GROUP (ORDER BY elo) as elo
+FROM
+	(SELECT
+		c.country as country,
+		p.elo_rating as elo
+	 FROM players p
+	 JOIN countries c ON p.country_id = c.id) as elo_ratings
+GROUP BY country
+ORDER BY elo DESC
+
+___________________________________________________________________________
+
+17. Which player has the best elo from their respective countries?
+
+SELECT *
+FROM(SELECT 
+		p.name as name,
+		t.title as title,
+		c.country as country,
+		p.elo_rating as elo,
+		((date_part('year', (SELECT current_date))) - p.birth_year) as approx_age,
+		rank() OVER (PARTITION BY c.country ORDER BY p.elo_rating DESC)
+	FROM players p
+	JOIN titles t ON p.title_id = t.id
+	JOIN countries c ON p.country_id = c.id) as rankings
+WHERE rank = 1
+ORDER BY elo DESC;
+
+___________________________________________________________________________
+
+18. How strong is the correlation between Country_id and Elo_rating, and Title_id and Elo_rating
+
+SELECT corr(title_id, elo_rating)
+FROM players
+ 
+#0.7478172160744682     -fairly strong
+
+SELECT corr(country_id, elo_rating)
+FROM players
+
+#-0.7285654364178213    -fairly strong
+
+___________________________________________________________________________
+
+19. Slope and Intercept of Country_id, elo_rating
+
+SELECT
+	round(regr_slope(country_id, elo_rating)::numeric,2) as slope,
+	round(regr_intercept(country_id, elo_rating)::numeric,2) as intercept
+FROM players;
+
+#formula is Y = b(prediction) + intercept
+
+
+
+##### EXPORT FOR R ANALYSIS #########
+
+COPY (SELECT name as name, title_id as title, country_id as country, elo_rating as elo, birth_year as birth_year,
+	 		 (date_part('year', (SELECT current_date)) - birth_year) as approx_age
+	  FROM players
+	  ORDER BY elo_rating DESC)
+TO 'C:\Users\Public\chess_quan.csv'
+WITH (FORMAT CSV,
+	  HEADER,
+	  DELIMITER ',');
+
+COPY(SELECT
+		p.name as name,
+		t.title as title,
+		c.country as country,
+		p.elo_rating as elo,
+		p.birth_year
+	FROM players p
+	JOIN titles t ON p.title_id = t.id
+	JOIN countries c ON p.country_id = c.id
+	ORDER BY elo_rating DESC)
+TO 'C:\Users\Public\chess_desc.csv'
+WITH (FORMAT CSV,
+	  HEADER,
+	  DELIMITER ',');
+
+########### EXPORT FOR TABLEAU ##############
+
+COPY
+	(SELECT
+		 rank() OVER (ORDER BY elo_rating DESC) world_rank,
+		 p.name as name,
+		 t.title as title,
+		 c.country as country_id,
+		 rank() OVER (PARTITION BY country_id ORDER BY elo_rating DESC) country_rank,
+		 g.latitude as latitude,
+		 g.longitude as longitude,
+		 p.elo_rating as elo,
+		 p.birth_year as birth_year,
+		 ((date_part('year', (SELECT current_date))) - p.birth_year) as age_approx
+	 FROM players p
+	 JOIN titles t ON p.title_id = t.id
+	 JOIN countries c ON p.country_id = c.id
+	 JOIN country_coord g ON c.country = g.country)
+TO 'C:\Users\Public\Project 2 - Chess ELO\chess_tableau_final.csv'
+WITH (FORMAT CSV, HEADER, DELIMITER ',');
+
+
+* I noticed that there were a few rows missing due to issues between the countries and country_coord table, most likely stemming from small mismatches in the data.
+
+SELECT
+	c.country,
+	g.latitude,
+	g.longitude
+FROM countries c
+JOIN country_coord g ON c.country = g.country
+ORDER BY 
+
+
+NOTE FOR LATER YOU'RE GOING TO HAVE TO RE-INGRATIATE EVERY TABLE AND HAVE EVERYTHING SET UP THE WAY IT WAS BEFORE BECAUSE COUNTRIES TIED TO PLAYERS CASCADINGLY
+	
+	
+
+
+
+
